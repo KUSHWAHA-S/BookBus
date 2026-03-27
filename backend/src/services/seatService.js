@@ -1,5 +1,6 @@
 const pool = require("../config/db")
 const redis = require("../config/redis")
+const { LOCK_TTL_SECONDS } = require("../config/constants")
 
 exports.lockSeat = async ({ tripId, seatId, userId }) => {
     if (!tripId || !seatId || !userId) {
@@ -9,13 +10,17 @@ exports.lockSeat = async ({ tripId, seatId, userId }) => {
     const key = `seat:${tripId}:${seatId}`
 
     // Atomic lock: only set if key does not exist.
-    const lockResult = await redis.set(key, userId, "EX", 300, "NX")
+    const lockResult = await redis.set(key, userId, "EX", LOCK_TTL_SECONDS, "NX")
 
     if (lockResult !== "OK") {
         return { ok: false, status: 400, message: "Seat already locked" }
     }
 
-    return { ok: true, status: 200, message: "Seat locked for 5 minutes" }
+    return {
+        ok: true,
+        status: 200,
+        message: `Seat locked for ${Math.floor(LOCK_TTL_SECONDS / 60)} minutes`,
+    }
 }
 
 exports.getSeatLayout = async (tripId) => {

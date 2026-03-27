@@ -58,9 +58,18 @@ create table if not exists public.bookings (
   trip_id uuid not null references public.trips(id) on delete restrict,
   total_amount numeric(10,2) not null check (total_amount >= 0),
   status booking_status not null default 'pending',
+  lock_expires_at timestamptz not null default (now() + interval '5 minutes'),
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
 );
+
+-- Backward-compatible migration for existing databases
+alter table if exists public.bookings
+  add column if not exists lock_expires_at timestamptz;
+
+update public.bookings
+set lock_expires_at = created_at + interval '5 minutes'
+where lock_expires_at is null;
 
 create table if not exists public.booking_seats (
   id uuid primary key default gen_random_uuid(),
@@ -71,6 +80,13 @@ create table if not exists public.booking_seats (
   unique (booking_id, seat_number)
 );
 
+create table if not exists public.notifications (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid not null references public.users(id) on delete cascade,
+  message text not null,
+  created_at timestamptz not null default now()
+);
+
 -- Helpful indexes for frequent queries
 create index if not exists idx_routes_from_to on public.routes(from_city, to_city);
 create index if not exists idx_trips_route_date on public.trips(route_id, date);
@@ -79,4 +95,6 @@ create index if not exists idx_bookings_user on public.bookings(user_id);
 create index if not exists idx_bookings_trip on public.bookings(trip_id);
 create index if not exists idx_booking_seats_booking on public.booking_seats(booking_id);
 create index if not exists idx_booking_seats_seat_number on public.booking_seats(seat_number);
+create index if not exists idx_notifications_user_created
+  on public.notifications(user_id, created_at desc);
 
